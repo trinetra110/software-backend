@@ -1,6 +1,7 @@
 package main
 
 import (
+	"archive/zip"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/gorilla/mux"
@@ -237,6 +239,186 @@ func getCodebaseFiles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// downloadFile downloads a specific file from a codebase
+func downloadFile(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	dirID := vars["id"]
+	filePath := r.URL.Query().Get("file")
+	
+	// Validate UUID format
+	if _, err := uuid.Parse(dirID); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid directory ID")
+		return
+	}
+	
+	if filePath == "" {
+		respondWithError(w, http.StatusBadRequest, "File path is required")
+		return
+	}
+	
+	// Clean the file path and prevent directory traversal
+	cleanPath := filepath.Clean(filePath)
+	if strings.HasPrefix(cleanPath, "..") || strings.Contains(cleanPath, "..") {
+		respondWithError(w, http.StatusBadRequest, "Invalid file path")
+		return
+	}
+	
+	// Construct full file path
+	baseDir := filepath.Join(BaseUploadDir, dirID)
+	fullPath := filepath.Join(baseDir, cleanPath)
+	
+	// Ensure the file is within the codebase directory
+	if !strings.HasPrefix(fullPath, baseDir) {
+		respondWithError(w, http.StatusBadRequest, "Invalid file path")
+		return
+	}
+	
+	// Check if file exists
+	fileInfo, err := os.Stat(fullPath)
+	if os.IsNotExist(err) {
+		respondWithError(w, http.StatusNotFound, "File not found")
+		return
+	}
+	
+	if fileInfo.IsDir() {
+		respondWithError(w, http.StatusBadRequest, "Cannot download directory")
+		return
+	}
+	
+	// Open the file
+	file, err := os.Open(fullPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to open file")
+		return
+	}
+	defer file.Close()
+	
+	// Set headers for file download
+	filename := filepath.Base(cleanPath)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
+	
+	// Copy file content to response
+	_, err = io.Copy(w, file)
+	if err != nil {
+		log.Printf("Error streaming file %s: %v", fullPath, err)
+		return
+	}
+	
+	log.Printf("Downloaded file: %s from codebase %s", cleanPath, dirID)
+}
+
+// downloadCodebaseZip downloads the entire codebase as a ZIP file
+func downloadCodebaseZip(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	dirID := vars["id"]
+	
+	// Validate UUID format
+	if _, err := uuid.Parse(dirID); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid directory ID")
+		return
+	}
+	
+	dirPath := filepath.Join(BaseUploadDir, dirID)
+	
+	// Check if directory exists
+	if _, err := os.Stat(dirPath); os.IsNotExist(err) {
+		respondWithError(w, http.StatusNotFound, "Codebase not found")
+		return
+	}
+	
+	// Set headers for ZIP download
+	filename := fmt.Sprintf("codebase-%s.zip", dirID)
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
+	
+	// Create ZIP archive directly to response writer
+	err := createZipArchive(w, dirPath)
+	if err != nil {
+		log.Printf("Error creating ZIP for codebase %s: %v", dirID, err)
+		// Can't send error response here as headers are already sent
+		return
+	}
+	
+	log.Printf("Downloaded ZIP archive for codebase: %s", dirID)
+}
+
+// readFileContent returns the content of a specific file
+func readFileContent(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	dirID := vars["id"]
+	filePath := r.URL.Query().Get("file")
+	
+	// Validate UUID format
+	if _, err := uuid.Parse(dirID); err != nil {
+		respondWithError(w, http.StatusBadRequest, "Invalid directory ID")
+		return
+	}
+	
+	if filePath == "" {
+		respondWithError(w, http.StatusBadRequest, "File path is required")
+		return
+	}
+	
+	// Clean the file path and prevent directory traversal
+	cleanPath := filepath.Clean(filePath)
+	if strings.HasPrefix(cleanPath, "..") || strings.Contains(cleanPath, "..") {
+		respondWithError(w, http.StatusBadRequest, "Invalid file path")
+		return
+	}
+	
+	// Construct full file path
+	baseDir := filepath.Join(BaseUploadDir, dirID)
+	fullPath := filepath.Join(baseDir, cleanPath)
+	
+	// Ensure the file is within the codebase directory
+	if !strings.HasPrefix(fullPath, baseDir) {
+		respondWithError(w, http.StatusBadRequest, "Invalid file path")
+		return
+	}
+	
+	// Check if file exists and is not a directory
+	fileInfo, err := os.Stat(fullPath)
+	if os.IsNotExist(err) {
+		respondWithError(w, http.StatusNotFound, "File not found")
+		return
+	}
+	
+	if fileInfo.IsDir() {
+		respondWithError(w, http.StatusBadRequest, "Cannot read directory as file")
+		return
+	}
+	
+	// Read file content
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		respondWithError(w, http.StatusInternalServerError, "Failed to read file")
+		return
+	}
+	
+	// Determine if file is text or binary
+	isText := isTextFile(content)
+	
+	response := map[string]interface{}{
+		"success":   true,
+		"file_path": cleanPath,
+		"size":      fileInfo.Size(),
+		"is_text":   isText,
+		"modified":  fileInfo.ModTime(),
+	}
+	
+	if isText {
+		response["content"] = string(content)
+	} else {
+		response["content"] = "Binary file - use download endpoint to get the file"
+		response["download_url"] = fmt.Sprintf("/codebases/%s/download?file=%s", dirID, filePath)
+	}
+	
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
+}
+
 // Helper function to count files recursively
 func countFilesRecursively(dirPath string) int {
 	count := 0
@@ -288,14 +470,96 @@ func getFileTree(basePath, currentPath string) ([]FileInfo, error) {
 	return files, nil
 }
 
-// Helper function to send error responses
-func respondWithError(w http.ResponseWriter, code int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(code)
-	json.NewEncoder(w).Encode(UploadResponse{
-		Success: false,
-		Message: message,
+// Helper function to create ZIP archive
+func createZipArchive(w io.Writer, sourceDir string) error {
+	zipWriter := zip.NewWriter(w)
+	defer zipWriter.Close()
+	
+	return filepath.WalkDir(sourceDir, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		
+		// Get relative path for the zip entry
+		relativePath, err := filepath.Rel(sourceDir, path)
+		if err != nil {
+			return err
+		}
+		
+		// Skip the root directory itself
+		if relativePath == "." {
+			return nil
+		}
+		
+		// Convert to forward slashes for ZIP compatibility
+		relativePath = strings.ReplaceAll(relativePath, "\\", "/")
+		
+		if d.IsDir() {
+			// Create directory entry in ZIP
+			_, err := zipWriter.Create(relativePath + "/")
+			return err
+		}
+		
+		// Create file entry in ZIP
+		zipFile, err := zipWriter.Create(relativePath)
+		if err != nil {
+			return err
+		}
+		
+		// Open source file
+		sourceFile, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer sourceFile.Close()
+		
+		// Copy file content to ZIP
+		_, err = io.Copy(zipFile, sourceFile)
+		return err
 	})
+}
+
+// Helper function to check if content is text
+func isTextFile(content []byte) bool {
+	if len(content) == 0 {
+		return true
+	}
+	
+	// Check if content is valid UTF-8
+	if !utf8.Valid(content) {
+		return false
+	}
+	
+	// Check for binary indicators (null bytes, excessive control characters)
+	nullBytes := 0
+	controlChars := 0
+	
+	for i, b := range content {
+		if i > 8192 { // Check only first 8KB
+			break
+		}
+		
+		if b == 0 {
+			nullBytes++
+		}
+		
+		if b < 32 && b != 9 && b != 10 && b != 13 { // Tab, LF, CR are OK
+			controlChars++
+		}
+	}
+	
+	// If more than 1% null bytes or 5% control chars, consider binary
+	contentLen := len(content)
+	if contentLen > 100 {
+		if float64(nullBytes)/float64(contentLen) > 0.01 {
+			return false
+		}
+		if float64(controlChars)/float64(contentLen) > 0.05 {
+			return false
+		}
+	}
+	
+	return true
 }
 
 func main() {
@@ -308,6 +572,9 @@ func main() {
 	r.HandleFunc("/upload", uploadCodebase).Methods("POST", "OPTIONS")
 	r.HandleFunc("/codebases", listUploadedCodebases).Methods("GET")
 	r.HandleFunc("/codebases/{id}", getCodebaseFiles).Methods("GET")
+	r.HandleFunc("/codebases/{id}/content", readFileContent).Methods("GET")
+	r.HandleFunc("/codebases/{id}/download", downloadFile).Methods("GET")
+	r.HandleFunc("/codebases/{id}/zip", downloadCodebaseZip).Methods("GET")
 	
 	// Health check
 	r.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -323,4 +590,13 @@ func main() {
 	log.Printf("Server starting on port %s", port)
 	log.Printf("Upload directory: %s", BaseUploadDir)
 	log.Fatal(http.ListenAndServe(":"+port, r))
+}
+
+func respondWithError(w http.ResponseWriter, code int, message string) {
+    w.Header().Set("Content-Type", "application/json")
+    w.WriteHeader(code)
+    json.NewEncoder(w).Encode(map[string]interface{}{
+        "success": false,
+        "error":   message,
+    })
 }
