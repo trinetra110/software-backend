@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Codebase Upload API Test - Windows Compatible</title>
+    <style>
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        margin: 20px;
+        background-color: #f5f5f5;
+      }
+      .container {
+        max-width: 900px;
+        margin: 0 auto;
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+      .section {
+        margin: 25px 0;
+        padding: 20px;
+        border: 1px solid #e0e0e0;
+        border-radius: 5px;
+        background-color: #fafafa;
+      }
+      button {
+        padding: 12px 24px;
+        margin: 8px 5px;
+        background-color: #007acc;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+      }
+      button:hover {
+        background-color: #005999;
+      }
+      button:disabled {
+        background-color: #cccccc;
+        cursor: not-allowed;
+      }
+      input[type="text"],
+      input[type="file"] {
+        padding: 8px;
+        margin: 5px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      .response {
+        background: #f8f9fa;
+        padding: 15px;
+        margin-top: 15px;
+        border-radius: 4px;
+        border-left: 4px solid #007acc;
+        font-family: "Courier New", monospace;
+        font-size: 12px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+      .error {
+        color: #d73027;
+        border-left-color: #d73027;
+      }
+      .success {
+        color: #1a9641;
+        border-left-color: #1a9641;
+      }
+      .status {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: bold;
+        margin-right: 10px;
+      }
+      .status.online {
+        background-color: #d4edda;
+        color: #155724;
+      }
+      .status.offline {
+        background-color: #f8d7da;
+        color: #721c24;
+      }
+      h1 {
+        color: #333;
+        text-align: center;
+        margin-bottom: 30px;
+      }
+      h3 {
+        color: #555;
+        margin-top: 0;
+      }
+      .file-info {
+        margin: 10px 0;
+        padding: 10px;
+        background: #e9ecef;
+        border-radius: 4px;
+        font-size: 12px;
+      }
+      .progress {
+        width: 100%;
+        height: 20px;
+        background-color: #e0e0e0;
+        border-radius: 10px;
+        overflow: hidden;
+        margin: 10px 0;
+      }
+      .progress-bar {
+        height: 100%;
+        background-color: #007acc;
+        width: 0%;
+        transition: width 0.3s ease;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <h1>🚀 Codebase Upload API Test Client</h1>
+      <div style="text-align: center; margin-bottom: 20px">
+        <span id="server-status" class="status offline">Server Offline</span>
+        <span id="server-url">http://localhost:8080</span>
+      </div>
+
+      <div class="section">
+        <h3>🏥 1. Health Check</h3>
+        <p>Test if the API server is running and responding.</p>
+        <button onclick="testHealth()" id="health-btn">
+          Check Server Health
+        </button>
+        <div id="health-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h3>📁 2. Upload Files</h3>
+        <p>Select a directory to upload to the server.</p>
+        <input
+          type="file"
+          id="fileInput"
+          multiple
+          webkitdirectory
+          accept="*/*"
+        />
+        <br />
+        <div id="file-info" class="file-info" style="display: none"></div>
+        <div id="upload-progress" class="progress" style="display: none">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        <button onclick="uploadFiles()" id="upload-btn" disabled>
+          Upload Selected Directory
+        </button>
+        <div id="upload-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h3>📋 3. List All Codebases</h3>
+        <p>View all uploaded codebases on the server.</p>
+        <button onclick="listCodebases()" id="list-btn">
+          List All Codebases
+        </button>
+        <div id="list-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h3>🔍 4. Get Codebase Details</h3>
+        <p>View files in a specific codebase by entering its UUID.</p>
+        <input
+          type="text"
+          id="directoryId"
+          placeholder="Enter Directory UUID (e.g., 550e8400-e29b-41d4-a716-446655440000)"
+          style="width: 400px"
+        />
+        <br />
+        <button onclick="getCodebaseDetails()" id="details-btn">
+          Get Codebase Details
+        </button>
+        <div id="details-response" class="response" style="display: none"></div>
+      </div>
+
+      <!-- <div class="section">
+        <h3>🛠️ Windows PowerShell Commands</h3>
+        <p>If you prefer using PowerShell, here are the equivalent commands:</p>
+        <div class="response">
+          <pre>
+# Health Check
+Invoke-RestMethod -Uri "http://localhost:8080/health" -Method Get
+
+# List Codebases
+Invoke-RestMethod -Uri "http://localhost:8080/codebases" -Method Get
+
+# Get Specific Codebase (replace UUID)
+Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE" -Method Get</pre
+          >
+        </div>
+      </div> -->
+    </div>
+
+    <script>
+      const API_BASE = "http://localhost:8080";
+      let serverOnline = false;
+
+      // Check server status on page load
+      window.onload = function () {
+        testHealth(true);
+
+        // File input change handler
+        document
+          .getElementById("fileInput")
+          .addEventListener("change", function (e) {
+            const files = e.target.files;
+            const uploadBtn = document.getElementById("upload-btn");
+            const fileInfo = document.getElementById("file-info");
+
+            if (files.length > 0) {
+              let totalSize = 0;
+              let fileTypes = {};
+
+              for (let file of files) {
+                totalSize += file.size;
+                const ext = file.name.split(".").pop().toLowerCase();
+                fileTypes[ext] = (fileTypes[ext] || 0) + 1;
+              }
+
+              const sizeInMB = (totalSize / (1024 * 1024)).toFixed(2);
+              const typesList = Object.entries(fileTypes)
+                .map(([ext, count]) => `${ext} (${count})`)
+                .join(", ");
+
+              fileInfo.innerHTML = `
+                        <strong>Selected:</strong> ${files.length} files<br>
+                        <strong>Total Size:</strong> ${sizeInMB} MB<br>
+                        <strong>File Types:</strong> ${typesList}<br>
+                        <strong>Root Directory:</strong> ${
+                          files[0].webkitRelativePath.split("/")[0]
+                        }
+                    `;
+              fileInfo.style.display = "block";
+              uploadBtn.disabled = false;
+            } else {
+              fileInfo.style.display = "none";
+              uploadBtn.disabled = true;
+            }
+          });
+      };
+
+      async function testHealth(silent = false) {
+        const btn = document.getElementById("health-btn");
+        const responseDiv = document.getElementById("health-response");
+        const statusDiv = document.getElementById("server-status");
+
+        if (!silent) {
+          btn.disabled = true;
+          btn.textContent = "Checking...";
+        }
+
+        try {
+          const response = await fetch(`${API_BASE}/health`);
+          const data = await response.json();
+
+          if (!silent) {
+            responseDiv.innerHTML = `<span class="success">✅ Server is healthy!<br>Response: ${JSON.stringify(
+              data,
+              null,
+              2
+            )}</span>`;
+            responseDiv.style.display = "block";
+          }
+
+          statusDiv.className = "status online";
+          statusDiv.textContent = "Server Online";
+          serverOnline = true;
+        } catch (error) {
+          if (!silent) {
+            responseDiv.innerHTML = `<span class="error">❌ Failed to connect to server<br>Error: ${error.message}<br><br>Make sure the Go server is running on port 8080.</span>`;
+            responseDiv.style.display = "block";
+          }
+
+          statusDiv.className = "status offline";
+          statusDiv.textContent = "Server Offline";
+          serverOnline = false;
+        } finally {
+          if (!silent) {
+            btn.disabled = false;
+            btn.textContent = "Check Server Health";
+          }
+        }
+      }
+
+      async function uploadFiles() {
+        const fileInput = document.getElementById("fileInput");
+        const files = fileInput.files;
+        const btn = document.getElementById("upload-btn");
+        const responseDiv = document.getElementById("upload-response");
+        const progressDiv = document.getElementById("upload-progress");
+        const progressBar = document.getElementById("progress-bar");
+
+        if (files.length === 0) {
+          alert("Please select a directory first");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Uploading...";
+        progressDiv.style.display = "block";
+        progressBar.style.width = "0%";
+
+        const formData = new FormData();
+        let processedFiles = 0;
+
+        for (let file of files) {
+          formData.append("files", file);
+          formData.append(`path_${file.name}`, file.webkitRelativePath);
+          processedFiles++;
+
+          // Update progress
+          const progress = (processedFiles / files.length) * 50; // 50% for file processing
+          progressBar.style.width = progress + "%";
+        }
+
+        try {
+          const response = await fetch(`${API_BASE}/upload`, {
+            method: "POST",
+            body: formData,
+          });
+
+          progressBar.style.width = "100%";
+
+          const data = await response.json();
+          const responseClass = data.success ? "success" : "error";
+          const icon = data.success ? "✅" : "❌";
+
+          responseDiv.innerHTML = `<span class="${responseClass}">${icon} Upload ${
+            data.success ? "Successful" : "Failed"
+          }!<br><pre>${JSON.stringify(data, null, 2)}</pre></span>`;
+          responseDiv.style.display = "block";
+
+          // Auto-fill directory ID for testing
+          if (data.directory_id) {
+            document.getElementById("directoryId").value = data.directory_id;
+          }
+        } catch (error) {
+          responseDiv.innerHTML = `<span class="error">❌ Upload failed<br>Error: ${error.message}</span>`;
+          responseDiv.style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Upload Selected Directory";
+          setTimeout(() => {
+            progressDiv.style.display = "none";
+          }, 2000);
+        }
+      }
+
+      async function listCodebases() {
+        const btn = document.getElementById("list-btn");
+        const responseDiv = document.getElementById("list-response");
+
+        btn.disabled = true;
+        btn.textContent = "Loading...";
+
+        try {
+          const response = await fetch(`${API_BASE}/codebases`);
+          const data = await response.json();
+
+          responseDiv.innerHTML = `<span class="success">✅ Codebases Retrieved<br><pre>${JSON.stringify(
+            data,
+            null,
+            2
+          )}</pre></span>`;
+          responseDiv.style.display = "block";
+        } catch (error) {
+          responseDiv.innerHTML = `<span class="error">❌ Failed to retrieve codebases<br>Error: ${error.message}</span>`;
+          responseDiv.style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "List All Codebases";
+        }
+      }
+
+      async function getCodebaseDetails() {
+        const directoryId = document.getElementById("directoryId").value.trim();
+        const btn = document.getElementById("details-btn");
+        const responseDiv = document.getElementById("details-response");
+
+        if (!directoryId) {
+          alert("Please enter a directory UUID");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Loading...";
+
+        try {
+          const response = await fetch(`${API_BASE}/codebases/${directoryId}`);
+          const data = await response.json();
+
+          const responseClass = data.success ? "success" : "error";
+          const icon = data.success ? "✅" : "❌";
+
+          responseDiv.innerHTML = `<span class="${responseClass}">${icon} Codebase Details<br><pre>${JSON.stringify(
+            data,
+            null,
+            2
+          )}</pre></span>`;
+          responseDiv.style.display = "block";
+        } catch (error) {
+          responseDiv.innerHTML = `<span class="error">❌ Failed to retrieve codebase details<br>Error: ${error.message}</span>`;
+          responseDiv.style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Get Codebase Details";
+        }
+      }
+    </script>
+  </body>
+</html>
