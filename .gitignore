@@ -19,3 +19,4 @@ go.work.sum
 !go.mod
 !README.md
 !LICENSE
+.hintrc
