@@ -139,23 +139,23 @@
         <p>If you prefer using PowerShell, here are the equivalent commands:</p>
         <div class="response">
           <pre>
-# Health Check
-Invoke-RestMethod -Uri "http://localhost:8080/health" -Method Get
+          # Health Check
+          Invoke-RestMethod -Uri "http://localhost:8080/health" -Method Get
 
-# List Codebases
-Invoke-RestMethod -Uri "http://localhost:8080/codebases" -Method Get
+          # List Codebases
+          Invoke-RestMethod -Uri "http://localhost:8080/codebases" -Method Get
 
-# Get Specific Codebase (replace UUID)
-Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE" -Method Get
+          # Get Specific Codebase (replace UUID)
+          Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE" -Method Get
 
-# Read File Content (replace UUID and path)
-Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/content?file=main.go" -Method Get
+          # Read File Content (replace UUID and path)
+          Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/content?file=main.go" -Method Get
 
-# Download File (replace UUID and path)  
-Invoke-WebRequest -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/download?file=main.go" -OutFile "downloaded_file.go"
+          # Download File (replace UUID and path)  
+          Invoke-WebRequest -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/download?file=main.go" -OutFile "downloaded_file.go"
 
-# Download ZIP (replace UUID)
-Invoke-WebRequest -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/zip" -OutFile "codebase.zip"</pre
+          # Download ZIP (replace UUID)
+          Invoke-WebRequest -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/zip" -OutFile "codebase.zip"</pre
           >
         </div>
       </div> -->
