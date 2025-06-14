@@ -7,6 +7,7 @@
   <body>
     <div class="container">
       <h1>🚀 Codebase Upload API Test Client</h1>
+
       <div style="text-align: center; margin-bottom: 20px">
         <span id="server-status" class="status offline">Server Offline</span>
         <span id="server-url">http://localhost:8080</span>
@@ -23,21 +24,25 @@
 
       <div class="section">
         <h3>📁 2. Upload Files</h3>
-        <p>Select a directory to upload to the server.</p>
-        <input
-          type="file"
-          id="fileInput"
-          multiple
-          webkitdirectory
-          accept="*/*"
-        />
+        <p>Select files or a directory to upload to the server.</p>
+        <div style="margin: 10px 0">
+          <label>
+            <input type="radio" name="uploadType" value="files" checked />
+            Select Multiple Files
+          </label>
+          <label style="margin-left: 20px">
+            <input type="radio" name="uploadType" value="directory" /> Select
+            Directory
+          </label>
+        </div>
+        <input type="file" id="fileInput" multiple accept="*/*" />
         <br />
         <div id="file-info" class="file-info" style="display: none"></div>
         <div id="upload-progress" class="progress" style="display: none">
           <div id="progress-bar" class="progress-bar"></div>
         </div>
         <button onclick="uploadFiles()" id="upload-btn" disabled>
-          Upload Selected Directory
+          Upload Selected Files
         </button>
         <div id="upload-response" class="response" style="display: none"></div>
       </div>
@@ -67,6 +72,68 @@
         <div id="details-response" class="response" style="display: none"></div>
       </div>
 
+      <div class="section">
+        <h3>📄 5. Read File Content</h3>
+        <p>Read the content of a specific file from a codebase.</p>
+        <input
+          type="text"
+          id="readDirectoryId"
+          placeholder="Directory UUID"
+          style="width: 200px"
+        />
+        <input
+          type="text"
+          id="readFilePath"
+          placeholder="File path (e.g., main.go)"
+          style="width: 200px"
+        />
+        <br />
+        <button onclick="readFileContent()" id="read-btn">
+          Read File Content
+        </button>
+        <div id="read-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h3>⬇️ 6. Download File</h3>
+        <p>Download a specific file from a codebase.</p>
+        <input
+          type="text"
+          id="downloadDirectoryId"
+          placeholder="Directory UUID"
+          style="width: 200px"
+        />
+        <input
+          type="text"
+          id="downloadFilePath"
+          placeholder="File path (e.g., main.go)"
+          style="width: 200px"
+        />
+        <br />
+        <button onclick="downloadFile()" id="download-btn">
+          Download File
+        </button>
+        <div
+          id="download-response"
+          class="response"
+          style="display: none"
+        ></div>
+      </div>
+
+      <div class="section">
+        <h3>📦 7. Download ZIP</h3>
+        <p>Download entire codebase as a ZIP file.</p>
+        <input
+          type="text"
+          id="zipDirectoryId"
+          placeholder="Directory UUID"
+          style="width: 300px"
+        />
+        <br />
+        <button onclick="downloadZip()" id="zip-btn">Download as ZIP</button>
+        <div id="zip-response" class="response" style="display: none"></div>
+      </div>
+
       <!-- <div class="section">
         <h3>🛠️ Windows PowerShell Commands</h3>
         <p>If you prefer using PowerShell, here are the equivalent commands:</p>
@@ -79,12 +146,237 @@ Invoke-RestMethod -Uri "http://localhost:8080/health" -Method Get
 Invoke-RestMethod -Uri "http://localhost:8080/codebases" -Method Get
 
 # Get Specific Codebase (replace UUID)
-Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE" -Method Get</pre
+Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE" -Method Get
+
+# Read File Content (replace UUID and path)
+Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/content?file=main.go" -Method Get
+
+# Download File (replace UUID and path)  
+Invoke-WebRequest -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/download?file=main.go" -OutFile "downloaded_file.go"
+
+# Download ZIP (replace UUID)
+Invoke-WebRequest -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/zip" -OutFile "codebase.zip"</pre
           >
         </div>
       </div> -->
     </div>
+    </div>
 
-    <script src="index.js" charset="utf-8"></script>
+    <script>
+      const API_BASE = "http://localhost:8080";
+      let serverOnline = false;
+
+      // Check server status on page load
+      window.onload = function () {
+        testHealth(true);
+
+        // File input change handler
+        document
+          .getElementById("fileInput")
+          .addEventListener("change", function (e) {
+            const files = e.target.files;
+            const uploadBtn = document.getElementById("upload-btn");
+            const fileInfo = document.getElementById("file-info");
+
+            if (files.length > 0) {
+              let totalSize = 0;
+              let fileTypes = {};
+
+              for (let file of files) {
+                totalSize += file.size;
+                const ext = file.name.split(".").pop().toLowerCase();
+                fileTypes[ext] = (fileTypes[ext] || 0) + 1;
+              }
+
+              const sizeInMB = (totalSize / (1024 * 1024)).toFixed(2);
+              const typesList = Object.entries(fileTypes)
+                .map(([ext, count]) => `${ext} (${count})`)
+                .join(", ");
+
+              fileInfo.innerHTML = `
+                        <strong>Selected:</strong> ${files.length} files<br>
+                        <strong>Total Size:</strong> ${sizeInMB} MB<br>
+                        <strong>File Types:</strong> ${typesList}<br>
+                        <strong>Root Directory:</strong> ${
+                          files[0].webkitRelativePath.split("/")[0]
+                        }
+                    `;
+              fileInfo.style.display = "block";
+              uploadBtn.disabled = false;
+            } else {
+              fileInfo.style.display = "none";
+              uploadBtn.disabled = true;
+            }
+          });
+      };
+
+      async function testHealth(silent = false) {
+        const btn = document.getElementById("health-btn");
+        const responseDiv = document.getElementById("health-response");
+        const statusDiv = document.getElementById("server-status");
+
+        if (!silent) {
+          btn.disabled = true;
+          btn.textContent = "Checking...";
+        }
+
+        try {
+          const response = await fetch(`${API_BASE}/health`);
+          const data = await response.json();
+
+          if (!silent) {
+            responseDiv.innerHTML = `<span class="success">✅ Server is healthy!<br>Response: ${JSON.stringify(
+              data,
+              null,
+              2
+            )}</span>`;
+            responseDiv.style.display = "block";
+          }
+
+          statusDiv.className = "status online";
+          statusDiv.textContent = "Server Online";
+          serverOnline = true;
+        } catch (error) {
+          if (!silent) {
+            responseDiv.innerHTML = `<span class="error">❌ Failed to connect to server<br>Error: ${error.message}<br><br>Make sure the Go server is running on port 8080.</span>`;
+            responseDiv.style.display = "block";
+          }
+
+          statusDiv.className = "status offline";
+          statusDiv.textContent = "Server Offline";
+          serverOnline = false;
+        } finally {
+          if (!silent) {
+            btn.disabled = false;
+            btn.textContent = "Check Server Health";
+          }
+        }
+      }
+
+      async function uploadFiles() {
+        const fileInput = document.getElementById("fileInput");
+        const files = fileInput.files;
+        const btn = document.getElementById("upload-btn");
+        const responseDiv = document.getElementById("upload-response");
+        const progressDiv = document.getElementById("upload-progress");
+        const progressBar = document.getElementById("progress-bar");
+
+        if (files.length === 0) {
+          alert("Please select a directory first");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Uploading...";
+        progressDiv.style.display = "block";
+        progressBar.style.width = "0%";
+
+        const formData = new FormData();
+        let processedFiles = 0;
+
+        for (let file of files) {
+          formData.append("files", file);
+          formData.append(`path_${file.name}`, file.webkitRelativePath);
+          processedFiles++;
+
+          // Update progress
+          const progress = (processedFiles / files.length) * 50; // 50% for file processing
+          progressBar.style.width = progress + "%";
+        }
+
+        try {
+          const response = await fetch(`${API_BASE}/upload`, {
+            method: "POST",
+            body: formData,
+          });
+
+          progressBar.style.width = "100%";
+
+          const data = await response.json();
+          const responseClass = data.success ? "success" : "error";
+          const icon = data.success ? "✅" : "❌";
+
+          responseDiv.innerHTML = `<span class="${responseClass}">${icon} Upload ${
+            data.success ? "Successful" : "Failed"
+          }!<br><pre>${JSON.stringify(data, null, 2)}</pre></span>`;
+          responseDiv.style.display = "block";
+
+          // Auto-fill directory ID for testing
+          if (data.directory_id) {
+            document.getElementById("directoryId").value = data.directory_id;
+          }
+        } catch (error) {
+          responseDiv.innerHTML = `<span class="error">❌ Upload failed<br>Error: ${error.message}</span>`;
+          responseDiv.style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Upload Selected Directory";
+          setTimeout(() => {
+            progressDiv.style.display = "none";
+          }, 2000);
+        }
+      }
+
+      async function listCodebases() {
+        const btn = document.getElementById("list-btn");
+        const responseDiv = document.getElementById("list-response");
+
+        btn.disabled = true;
+        btn.textContent = "Loading...";
+
+        try {
+          const response = await fetch(`${API_BASE}/codebases`);
+          const data = await response.json();
+
+          responseDiv.innerHTML = `<span class="success">✅ Codebases Retrieved<br><pre>${JSON.stringify(
+            data,
+            null,
+            2
+          )}</pre></span>`;
+          responseDiv.style.display = "block";
+        } catch (error) {
+          responseDiv.innerHTML = `<span class="error">❌ Failed to retrieve codebases<br>Error: ${error.message}</span>`;
+          responseDiv.style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "List All Codebases";
+        }
+      }
+
+      async function getCodebaseDetails() {
+        const directoryId = document.getElementById("directoryId").value.trim();
+        const btn = document.getElementById("details-btn");
+        const responseDiv = document.getElementById("details-response");
+
+        if (!directoryId) {
+          alert("Please enter a directory UUID");
+          return;
+        }
+
+        btn.disabled = true;
+        btn.textContent = "Loading...";
+
+        try {
+          const response = await fetch(`${API_BASE}/codebases/${directoryId}`);
+          const data = await response.json();
+
+          const responseClass = data.success ? "success" : "error";
+          const icon = data.success ? "✅" : "❌";
+
+          responseDiv.innerHTML = `<span class="${responseClass}">${icon} Codebase Details<br><pre>${JSON.stringify(
+            data,
+            null,
+            2
+          )}</pre></span>`;
+          responseDiv.style.display = "block";
+        } catch (error) {
+          responseDiv.innerHTML = `<span class="error">❌ Failed to retrieve codebase details<br>Error: ${error.message}</span>`;
+          responseDiv.style.display = "block";
+        } finally {
+          btn.disabled = false;
+          btn.textContent = "Get Codebase Details";
+        }
+      }
+    </script>
   </body>
 </html>
