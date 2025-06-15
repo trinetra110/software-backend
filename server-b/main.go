@@ -18,19 +18,29 @@ import (
 
 const (
 	MaxUploadSize = 100 << 20
-	BaseStorageDir = "./storage"
 )
 
-type StorageServer struct{}
+type StorageServer struct {
+	baseStorageDir string
+}
 
 type StoreResponse struct {
 	Success bool   `json:"success"`
 	Message string `json:"message"`
 }
 
-func init() {
-	if err := os.MkdirAll(BaseStorageDir, 0755); err != nil {
+func NewStorageServer() *StorageServer {
+	baseDir := os.Getenv("STORAGE_DIR")
+	if baseDir == "" {
+		baseDir = "./storage"
+	}
+
+	if err := os.MkdirAll(baseDir, 0755); err != nil {
 		log.Fatalf("Failed to create base storage directory: %v", err)
+	}
+
+	return &StorageServer{
+		baseStorageDir: baseDir,
 	}
 }
 
@@ -59,7 +69,7 @@ func (s *StorageServer) storeFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	storageDir := filepath.Join(BaseStorageDir, codebaseID)
+	storageDir := filepath.Join(s.baseStorageDir, codebaseID)
 	if err := os.MkdirAll(storageDir, 0755); err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to create storage directory")
 		return
@@ -82,24 +92,29 @@ func (s *StorageServer) storeFiles(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// Get the relative path from form data - this preserves directory structure
 		relativePath := r.FormValue("path_" + fileHeader.Filename)
 		if relativePath == "" {
 			relativePath = fileName
 		}
 
+		// Clean the path and ensure it's safe
 		relativePath = filepath.Clean(relativePath)
 		if strings.HasPrefix(relativePath, "..") {
 			log.Printf("Invalid path (directory traversal attempt): %s", relativePath)
 			continue
 		}
 
+		// Create the full path maintaining directory structure
 		fullPath := filepath.Join(storageDir, relativePath)
 		
+		// Create all necessary parent directories
 		if err := os.MkdirAll(filepath.Dir(fullPath), 0755); err != nil {
 			log.Printf("Error creating directory for %s: %v", fullPath, err)
 			continue
 		}
 
+		// Create and write the file
 		dst, err := os.Create(fullPath)
 		if err != nil {
 			log.Printf("Error creating file %s: %v", fullPath, err)
@@ -151,20 +166,24 @@ func (s *StorageServer) getFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Clean the path and ensure it's safe
 	cleanPath := filepath.Clean(filePath)
 	if strings.HasPrefix(cleanPath, "..") || strings.Contains(cleanPath, "..") {
 		respondWithError(w, http.StatusBadRequest, "Invalid file path")
 		return
 	}
 	
-	baseDir := filepath.Join(BaseStorageDir, codebaseID)
+	// Build the full path
+	baseDir := filepath.Join(s.baseStorageDir, codebaseID)
 	fullPath := filepath.Join(baseDir, cleanPath)
 	
+	// Ensure the path is within the base directory
 	if !strings.HasPrefix(fullPath, baseDir) {
 		respondWithError(w, http.StatusBadRequest, "Invalid file path")
 		return
 	}
 	
+	// Check if file exists
 	fileInfo, err := os.Stat(fullPath)
 	if os.IsNotExist(err) {
 		respondWithError(w, http.StatusNotFound, "File not found")
@@ -176,12 +195,14 @@ func (s *StorageServer) getFileContent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Read file content
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to read file")
 		return
 	}
 	
+	// Determine if file is text or binary
 	isText := isTextFile(content)
 	
 	response := map[string]interface{}{
@@ -218,20 +239,24 @@ func (s *StorageServer) downloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Clean the path and ensure it's safe
 	cleanPath := filepath.Clean(filePath)
 	if strings.HasPrefix(cleanPath, "..") || strings.Contains(cleanPath, "..") {
 		respondWithError(w, http.StatusBadRequest, "Invalid file path")
 		return
 	}
 	
-	baseDir := filepath.Join(BaseStorageDir, codebaseID)
+	// Build the full path
+	baseDir := filepath.Join(s.baseStorageDir, codebaseID)
 	fullPath := filepath.Join(baseDir, cleanPath)
 	
+	// Ensure the path is within the base directory
 	if !strings.HasPrefix(fullPath, baseDir) {
 		respondWithError(w, http.StatusBadRequest, "Invalid file path")
 		return
 	}
 	
+	// Check if file exists
 	fileInfo, err := os.Stat(fullPath)
 	if os.IsNotExist(err) {
 		respondWithError(w, http.StatusNotFound, "File not found")
@@ -243,6 +268,7 @@ func (s *StorageServer) downloadFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
+	// Open file for reading
 	file, err := os.Open(fullPath)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to open file")
@@ -250,11 +276,13 @@ func (s *StorageServer) downloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 	defer file.Close()
 	
+	// Set headers for file download
 	filename := filepath.Base(cleanPath)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", fileInfo.Size()))
 	
+	// Stream file content
 	_, err = io.Copy(w, file)
 	if err != nil {
 		log.Printf("Error streaming file %s: %v", fullPath, err)
@@ -273,17 +301,20 @@ func (s *StorageServer) downloadZip(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	
-	storageDir := filepath.Join(BaseStorageDir, codebaseID)
+	storageDir := filepath.Join(s.baseStorageDir, codebaseID)
 	
+	// Check if codebase directory exists
 	if _, err := os.Stat(storageDir); os.IsNotExist(err) {
 		respondWithError(w, http.StatusNotFound, "Codebase not found")
 		return
 	}
 	
+	// Set headers for ZIP download
 	filename := fmt.Sprintf("codebase-%s.zip", codebaseID)
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=\"%s\"", filename))
 	
+	// Create ZIP archive and stream it
 	err := createZipArchive(w, storageDir)
 	if err != nil {
 		log.Printf("Error creating ZIP for codebase %s: %v", codebaseID, err)
@@ -302,27 +333,33 @@ func createZipArchive(w io.Writer, sourceDir string) error {
 			return err
 		}
 		
+		// Get relative path from source directory
 		relativePath, err := filepath.Rel(sourceDir, path)
 		if err != nil {
 			return err
 		}
 		
+		// Skip the root directory itself
 		if relativePath == "." {
 			return nil
 		}
 		
+		// Convert to forward slashes for ZIP compatibility
 		relativePath = strings.ReplaceAll(relativePath, "\\", "/")
 		
 		if d.IsDir() {
+			// Create directory entry in ZIP
 			_, err := zipWriter.Create(relativePath + "/")
 			return err
 		}
 		
+		// Create file entry in ZIP
 		zipFile, err := zipWriter.Create(relativePath)
 		if err != nil {
 			return err
 		}
 		
+		// Copy file content to ZIP
 		sourceFile, err := os.Open(path)
 		if err != nil {
 			return err
@@ -339,15 +376,17 @@ func isTextFile(content []byte) bool {
 		return true
 	}
 	
+	// Check if content is valid UTF-8
 	if !utf8.Valid(content) {
 		return false
 	}
 	
+	// Check for null bytes and excessive control characters
 	nullBytes := 0
 	controlChars := 0
 	
 	for i, b := range content {
-		if i > 8192 {
+		if i > 8192 { // Only check first 8KB
 			break
 		}
 		
@@ -355,6 +394,7 @@ func isTextFile(content []byte) bool {
 			nullBytes++
 		}
 		
+		// Count control characters (excluding common ones like tab, newline, carriage return)
 		if b < 32 && b != 9 && b != 10 && b != 13 {
 			controlChars++
 		}
@@ -362,9 +402,11 @@ func isTextFile(content []byte) bool {
 	
 	contentLen := len(content)
 	if contentLen > 100 {
+		// If more than 1% null bytes, likely binary
 		if float64(nullBytes)/float64(contentLen) > 0.01 {
 			return false
 		}
+		// If more than 5% control characters, likely binary
 		if float64(controlChars)/float64(contentLen) > 0.05 {
 			return false
 		}
@@ -383,7 +425,7 @@ func respondWithError(w http.ResponseWriter, code int, message string) {
 }
 
 func main() {
-	server := &StorageServer{}
+	server := NewStorageServer()
 	
 	r := mux.NewRouter()
 	
@@ -405,6 +447,6 @@ func main() {
 	}
 	
 	log.Printf("Storage Server B starting on port %s", port)
-	log.Printf("Storage directory: %s", BaseStorageDir)
+	log.Printf("Storage directory: %s", server.baseStorageDir)
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }

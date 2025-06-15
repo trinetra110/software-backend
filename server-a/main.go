@@ -21,11 +21,11 @@ import (
 
 const (
 	MaxUploadSize = 100 << 20 // 100MB
-	StorageServerURL = "http://localhost:8081"
 )
 
 type Server struct {
-	db *sql.DB
+	db               *sql.DB
+	storageServerURL string
 }
 
 type UploadResponse struct {
@@ -53,6 +53,11 @@ func NewServer() *Server {
 		dbURL = "postgres://user:password@localhost/codebase_db?sslmode=disable"
 	}
 
+	storageServerURL := os.Getenv("STORAGE_SERVER_URL")
+	if storageServerURL == "" {
+		storageServerURL = "http://localhost:8081"
+	}
+
 	db, err := sql.Open("postgres", dbURL)
 	if err != nil {
 		log.Fatalf("Failed to connect to database: %v", err)
@@ -62,7 +67,10 @@ func NewServer() *Server {
 		log.Fatalf("Failed to ping database: %v", err)
 	}
 
-	server := &Server{db: db}
+	server := &Server{
+		db:               db,
+		storageServerURL: storageServerURL,
+	}
 	server.initDB()
 	return server
 }
@@ -227,7 +235,7 @@ func (s *Server) forwardFilesToStorage(codebaseID string, files []*multipart.Fil
 	writer.Close()
 
 	// Send to storage server
-	resp, err := http.Post(StorageServerURL+"/store", writer.FormDataContentType(), &buf)
+	resp, err := http.Post(s.storageServerURL+"/store", writer.FormDataContentType(), &buf)
 	if err != nil {
 		return nil, err
 	}
@@ -322,7 +330,7 @@ func (s *Server) readFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Forward request to storage server
-	url := fmt.Sprintf("%s/content/%s?file=%s", StorageServerURL, codebaseID, filePath)
+	url := fmt.Sprintf("%s/content/%s?file=%s", s.storageServerURL, codebaseID, filePath)
 	resp, err := http.Get(url)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve file from storage")
@@ -352,7 +360,7 @@ func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Forward request to storage server
-	url := fmt.Sprintf("%s/download/%s?file=%s", StorageServerURL, codebaseID, filePath)
+	url := fmt.Sprintf("%s/download/%s?file=%s", s.storageServerURL, codebaseID, filePath)
 	resp, err := http.Get(url)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve file from storage")
@@ -380,7 +388,7 @@ func (s *Server) downloadZip(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Forward request to storage server
-	url := fmt.Sprintf("%s/zip/%s", StorageServerURL, codebaseID)
+	url := fmt.Sprintf("%s/zip/%s", s.storageServerURL, codebaseID)
 	resp, err := http.Get(url)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve ZIP from storage")
@@ -437,6 +445,6 @@ func main() {
 	}
 	
 	log.Printf("Server A starting on port %s", port)
-	log.Printf("Storage server URL: %s", StorageServerURL)
+	log.Printf("Storage server URL: %s", server.storageServerURL)
 	log.Fatal(http.ListenAndServe(":"+port, r))
 }
