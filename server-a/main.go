@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"time"
 
 	"github.com/google/uuid"
@@ -50,10 +49,10 @@ type Codebase struct {
 func NewServer() *Server {
 	dbURL := os.Getenv("DATABASE_URL")
 	if dbURL == "" {
-		dbURL = "postgres://user:password@localhost/codebase_db?sslmode=disable"
+		dbURL = "user=postgres password=password dbname=postgres sslmode=disable"
 	}
 
-	storageServerURL := os.Getenv("STORAGE_SERVER_URL")
+	storageServerURL := os.Getenv("SERVER_B_URL")
 	if storageServerURL == "" {
 		storageServerURL = "http://localhost:8081"
 	}
@@ -105,19 +104,19 @@ func enableCORS(next http.Handler) http.Handler {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "POST, GET, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
-		
+
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
 			return
 		}
-		
+
 		next.ServeHTTP(w, r)
 	})
 }
 
 func (s *Server) uploadCodebase(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, MaxUploadSize)
-	
+
 	if err := r.ParseMultipartForm(MaxUploadSize); err != nil {
 		respondWithError(w, http.StatusBadRequest, "File too large or invalid form data")
 		return
@@ -148,7 +147,7 @@ func (s *Server) uploadCodebase(w http.ResponseWriter, r *http.Request) {
 	defer tx.Rollback()
 
 	// Insert codebase record
-	_, err = tx.Exec("INSERT INTO codebases (id, file_count) VALUES ($1, $2)", 
+	_, err = tx.Exec("INSERT INTO codebases (id, file_count) VALUES ($1, $2)",
 		codebaseID, len(uploadedFiles))
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to save codebase metadata")
@@ -275,7 +274,7 @@ func (s *Server) listCodebases(w http.ResponseWriter, r *http.Request) {
 func (s *Server) getCodebaseFiles(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	codebaseID := vars["id"]
-	
+
 	if _, err := uuid.Parse(codebaseID); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid directory ID")
 		return
@@ -318,7 +317,7 @@ func (s *Server) readFileContent(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	codebaseID := vars["id"]
 	filePath := r.URL.Query().Get("file")
-	
+
 	if _, err := uuid.Parse(codebaseID); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid directory ID")
 		return
@@ -330,6 +329,7 @@ func (s *Server) readFileContent(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Forward request to storage server
+	//log.Printf("Fetching file content for codebase %s, file %s", codebaseID, filePath)
 	url := fmt.Sprintf("%s/content/%s?file=%s", s.storageServerURL, codebaseID, filePath)
 	resp, err := http.Get(url)
 	if err != nil {
@@ -348,7 +348,7 @@ func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	codebaseID := vars["id"]
 	filePath := r.URL.Query().Get("file")
-	
+
 	if _, err := uuid.Parse(codebaseID); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid directory ID")
 		return
@@ -361,6 +361,7 @@ func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
 
 	// Forward request to storage server
 	url := fmt.Sprintf("%s/download/%s?file=%s", s.storageServerURL, codebaseID, filePath)
+	//log.Printf("%s/download/%s?file=%s", s.storageServerURL, codebaseID, filePath)
 	resp, err := http.Get(url)
 	if err != nil {
 		respondWithError(w, http.StatusInternalServerError, "Failed to retrieve file from storage")
@@ -381,7 +382,7 @@ func (s *Server) downloadFile(w http.ResponseWriter, r *http.Request) {
 func (s *Server) downloadZip(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	codebaseID := vars["id"]
-	
+
 	if _, err := uuid.Parse(codebaseID); err != nil {
 		respondWithError(w, http.StatusBadRequest, "Invalid directory ID")
 		return
@@ -426,7 +427,7 @@ func main() {
 
 	r := mux.NewRouter()
 	r.Use(enableCORS)
-	
+
 	// API routes
 	r.HandleFunc("/upload", server.uploadCodebase).Methods("POST", "OPTIONS")
 	r.HandleFunc("/codebases", server.listCodebases).Methods("GET")
@@ -435,7 +436,7 @@ func main() {
 	r.HandleFunc("/codebases/{id}/download", server.downloadFile).Methods("GET")
 	r.HandleFunc("/codebases/{id}/zip", server.downloadZip).Methods("GET")
 	r.HandleFunc("/health", server.healthCheck).Methods("GET")
-	
+
 	// Serve static files
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir("./static/")))
 
@@ -443,7 +444,7 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	
+
 	log.Printf("Server A starting on port %s", port)
 	log.Printf("Storage server URL: %s", server.storageServerURL)
 	log.Fatal(http.ListenAndServe(":"+port, r))
