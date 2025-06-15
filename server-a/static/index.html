@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Codebase Upload API Test - Updated for Go Server</title>
+    <link rel="stylesheet" href="style.css">
+  </head>
+  <body>
+    <div class="container">
+      <h1>🚀 Codebase Upload API Test Client</h1>
+
+      <div style="text-align: center; margin-bottom: 20px">
+        <span id="server-status" class="status offline">Server Offline</span>
+        <span id="server-url">http://localhost:8080</span>
+      </div>
+
+      <div class="section">
+        <h3>🏥 1. Health Check</h3>
+        <p>Test if the API server is running and responding.</p>
+        <button onclick="testHealth()" id="health-btn">
+          Check Server Health
+        </button>
+        <div id="health-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h3>📁 2. Upload Files</h3>
+        <p>Select files or a directory to upload to the server.</p>
+        <div style="margin: 10px 0">
+          <label>
+            <input type="radio" name="uploadType" value="files" checked />
+            Select Multiple Files
+          </label>
+          <label style="margin-left: 20px">
+            <input type="radio" name="uploadType" value="directory" /> Select
+            Directory
+          </label>
+        </div>
+        <label for="fileInput" id="fileInputLabel">Choose files or directory:</label>
+        <input type="file" id="fileInput" multiple accept="*/*" title="Select files or a directory to upload" />
+        <br />
+        <div id="file-info" class="file-info" style="display: none"></div>
+        <div id="upload-progress" class="progress" style="display: none">
+          <div id="progress-bar" class="progress-bar"></div>
+        </div>
+        <button onclick="uploadFiles()" id="upload-btn" disabled>
+          Upload Selected Files
+        </button>
+        <div id="upload-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h3>📋 3. List All Codebases</h3>
+        <p>View all uploaded codebases on the server.</p>
+        <button onclick="listCodebases()" id="list-btn">
+          List All Codebases
+        </button>
+        <div id="list-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h3>🔍 4. Get Codebase Details</h3>
+        <p>View files in a specific codebase by entering its UUID.</p>
+        <input
+          type="text"
+          id="directoryId"
+          placeholder="Enter Directory UUID (e.g., 550e8400-e29b-41d4-a716-446655440000)"
+          style="width: 400px"
+        />
+        <br />
+        <button onclick="getCodebaseDetails()" id="details-btn">
+          Get Codebase Details
+        </button>
+        <div id="details-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h3>📄 5. Read File Metadata</h3>
+        <p>Read the metadata of a specific file from a codebase.</p>
+        <input
+          type="text"
+          id="readDirectoryId"
+          placeholder="Directory UUID"
+          style="width: 200px"
+        />
+        <input
+          type="text"
+          id="readFilePath"
+          placeholder="File path (e.g., main.go)"
+          style="width: 200px"
+        />
+        <br />
+        <button onclick="readFileMetadata()" id="read-btn">
+          Read File Metadata
+        </button>
+        <div id="read-response" class="response" style="display: none"></div>
+      </div>
+
+      <div class="section">
+        <h3>⬇️ 6. Download File</h3>
+        <p>Download a specific file from a codebase.</p>
+        <input
+          type="text"
+          id="downloadDirectoryId"
+          placeholder="Directory UUID"
+          style="width: 200px"
+        />
+        <input
+          type="text"
+          id="downloadFilePath"
+          placeholder="File path (e.g., main.go)"
+          style="width: 200px"
+        />
+        <br />
+        <button onclick="downloadFile()" id="download-btn">
+          Download File
+        </button>
+        <div
+          id="download-response"
+          class="response"
+          style="display: none"
+        ></div>
+      </div>
+
+      <div class="section">
+        <h3>📦 7. Download ZIP</h3>
+        <p>Download entire codebase as a ZIP file.</p>
+        <input
+          type="text"
+          id="zipDirectoryId"
+          placeholder="Directory UUID"
+          style="width: 300px"
+        />
+        <br />
+        <button onclick="downloadZip()" id="zip-btn">Download as ZIP</button>
+        <div id="zip-response" class="response" style="display: none"></div>
+      </div>
+
+      <!-- <div class="section">
+        <h3>🛠️ Windows PowerShell Commands</h3>
+        <p>If you prefer using PowerShell, here are the equivalent commands:</p>
+        <div class="response">
+          <pre>
+# Health Check
+Invoke-RestMethod -Uri "http://localhost:8080/health" -Method Get
+
+# List Codebases
+Invoke-RestMethod -Uri "http://localhost:8080/codebases" -Method Get
+
+# Get Specific Codebase (replace UUID)
+Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE" -Method Get
+
+# Read File Content (replace UUID and path)
+Invoke-RestMethod -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/content?file=main.go" -Method Get
+
+# Download File (replace UUID and path)  
+Invoke-WebRequest -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/download?file=main.go" -OutFile "downloaded_file.go"
+
+# Download ZIP (replace UUID)
+Invoke-WebRequest -Uri "http://localhost:8080/codebases/YOUR-UUID-HERE/zip" -OutFile "codebase.zip"</pre
+          >
+        </div>
+      </div> -->
+    </div>
+
+    <script src="script.js"></script>
+  </body>
+</html>

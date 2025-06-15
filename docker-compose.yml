@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: codebase_db
+      POSTGRES_USER: user
+      POSTGRES_PASSWORD: password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  server-a:
+    build: ./server-a
+    ports:
+      - "8080:8080"
+    environment:
+      DATABASE_URL: postgres://user:password@postgres:5432/codebase_db?sslmode=disable
+      STORAGE_SERVER_URL: http://server-b:8081
+    depends_on:
+      - postgres
+      - server-b
+    volumes:
+      - ./server-a/static:/app/static
+
+  server-b:
+    build: ./server-b
+    ports:
+      - "8081:8081"
+    volumes:
+      - storage_data:/app/storage
+
+volumes:
+  postgres_data:
+  storage_data:

@@ -1,4 +1,4 @@
-module codebase-api
+module server-b
 
 go 1.24.4
 
